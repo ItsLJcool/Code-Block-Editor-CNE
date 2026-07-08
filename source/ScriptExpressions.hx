@@ -101,6 +101,16 @@ class FunctionContainer extends ExprContainer {
 		this.isInline = isInline;
 	}
 
+	public function addExpr(_expr:Expr):Bool {
+		switch (this.expr.e) { case ExprDef.EBlock(exprs): exprs.push(_expr); return true; }
+		return false;
+	}
+
+	public function insertExpr(index:Int, _expr:Expr):Bool {
+		switch (this.expr.e) { case ExprDef.EBlock(exprs): exprs.insert(index, _expr); return true; }
+		return false;
+	}
+
 	override public function toExpr():Expr {
 		return new Expr(
 			ExprDef.EFunction(args, expr, name, ret, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline),
@@ -145,17 +155,58 @@ class CallContainer extends ExprContainer {
 	}
 }
 
+class CustomClassContainer extends ExprContainer {
+	var name:String;
+	var fields:Array<Expr>;
+
+	var extend:Null<String>;
+	var interfaces:Array<String>;
+
+	var isFinal:Bool;
+	var isPrivate:Bool;
+
+	function new(name, fields, extend, interfaces, isFinal, isPrivate) {
+		super(null);
+		this.name = name;
+		this.fields = fields;
+		this.extend = extend;
+		this.interfaces = interfaces;
+		this.isFinal = isFinal;
+		this.isPrivate = isPrivate;
+	}
+
+	override public function toExpr():Expr {
+		return new Expr(
+			ExprDef.EClass(name, fields, extend, interfaces, isFinal, isPrivate),
+			this.pmin, this.pmax, '_CustomClassContainer_', this.line
+		);
+	}
+}
+
 class ScriptExpressions {
 
 	public static var PRINTER = new Printer();
-	public static function stringify(expr:Expr):String {
+	
+	// TODO: Fix EClass printing.
+	public static function stringify(expr:Expr, ?prefix:String):String {
 		var buf = new StringBuf();
+		buf.add(prefix ?? '');
 		switch(expr.e) {
 			case ExprDef.EBlock(e): 
 				for (expr in e) {
 					buf.add(PRINTER.exprToString(expr));
 					buf.add(";\n");
 				}
+			case ExprDef.EClass(name, fields, extend, interfaces, fnal):
+				var isFinal = fnal != null && fnal;
+				if (isFinal) buf.add('final ');
+				buf.add('class $name');
+				if (extend != null) buf.add(' extends $extend');
+				for (_interface in interfaces) buf.add(' implements $_interface');
+
+				buf.add(" {\n");
+				for( e in fields ) buf.add(stringify(e));
+				buf.add("}\n");
 			default:
 				buf.add(PRINTER.exprToString(expr));
 				buf.add(";\n");
@@ -296,6 +347,15 @@ class ScriptExpressions {
 	function get_imports():Array<ImportContainer> {
 		return expressions.filter(function(e) return e is ImportContainer);
 	}
+	public var calls(get, never):Array<CallContainer>;
+	function get_calls():Array<CallContainer> {
+		return expressions.filter(function(e) return e is CallContainer);
+	}
+
+	public var custom_classes(get, never):Array<CustomClassContainer>;
+	function get_custom_classes():Array<CustomClassContainer> {
+		return expressions.filter(function(e) return e is CustomClassContainer);
+	}
 
 	public function new(code:String, ?auto_unravel:Bool = true) {
 		this._code = code;
@@ -329,13 +389,15 @@ class ScriptExpressions {
 		var _imports:Array<ImportContainer> = imports;
 		var _variables:Array<VariableContainer> = variables;
 		var _functions:Array<FunctionContainer> = functions;
+		var _custom_classes:Array<CustomClassContainer> = custom_classes;
 
-		var _calls:Array<CallContainer> = expressions.filter((e) -> e is CallContainer);
+		var _calls:Array<CallContainer> = calls;
 
 		var bruh:IntMap<String> = new IntMap();
 		bruh.set(expressions.indexOf(_imports[imports.length - 1]), 'imports');
 		bruh.set(expressions.indexOf(_variables[variables.length - 1]), 'variables');
 		bruh.set(expressions.indexOf(_functions[functions.length - 1]), 'functions');
+		bruh.set(expressions.indexOf(_custom_classes[custom_classes.length - 1]), 'custom_classes');
 		var values:Array<Int> = [for (int=>c in bruh) int];
 		values.sort((a, b) -> return a - b);
 
@@ -356,12 +418,18 @@ class ScriptExpressions {
 				case 'imports': _imports.push(c);
 				case 'variables': _variables.push(c);
 				case 'functions': _functions.push(c);
+				case 'custom_classes': _custom_classes.push(c);
 			}
 		}
 
 		if (_imports.length > 0) {
 			buf.add("/* region Imports */\n\n");
 			for (container in _imports) buf.add(stringify(container.toExpr()));
+			buf.add("\n/* endregion */\n");
+		}
+		if (_custom_classes.length > 0) {
+			buf.add("\n/* region Custom Classes */\n\n");
+			for (container in _custom_classes) buf.add(stringify(container.toExpr()));
 			buf.add("\n/* endregion */\n");
 		}
 		if (_variables.length > 0) {
@@ -393,6 +461,9 @@ class ScriptExpressions {
 
 			case ExprDef.ECall(expr, params):
 				addCall(expr, params).exprOrigin(prev_expr);
+			case ExprDef.EClass(name, fields, extend, interfaces, isFinal, isPrivate):
+				addCustomClass(name, fields, extend, interfaces, isFinal, isPrivate).exprOrigin(prev_expr);
+
 			// default: trace('Unknown expr: ${expr.e}');
 		}
 	}
@@ -472,6 +543,27 @@ class ScriptExpressions {
 		expr:Expr, params:Array<Expr>
 	):CallContainer {
 		var c = new CallContainer(expr, params);
+		expressions.insert(INDEX, c);
+		return c;
+	}
+	/* endregion */
+
+	/* region Custom Classes */
+	public function addCustomClass(
+		name:String, fields:Array<Expr>, ?extend:Null<String>, ?interfaces:Array<String>,
+		?isFinal:Bool, ?isPrivate:Bool
+	):CustomClassContainer {
+		var c = new CustomClassContainer(name, fields, extend, interfaces, isFinal, isPrivate);
+		expressions.push(c);
+		return c;
+	}
+	
+	public function insertCustomClass(
+		INDEX:Int,
+		name:String, fields:Array<Expr>, ?extend:Null<String>, ?interfaces:Array<String>,
+		?isFinal:Bool, ?isPrivate:Bool
+	):CustomClassContainer {
+		var c = new CustomClassContainer(name, fields, extend, interfaces, isFinal, isPrivate);
 		expressions.insert(INDEX, c);
 		return c;
 	}

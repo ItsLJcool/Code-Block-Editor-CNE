@@ -19,11 +19,33 @@ import flixel.util.FlxAxes;
 import ScriptExpressions;
 import Type;
 
-var script_path:String = Paths.getPath("data/test.hx");
-var exprs:ScriptExpressions = new ScriptExpressions(Assets.getText(script_path));
-exprs.addVariable('myVar', CType.CTPath([Int]), new Expr(ExprDef.EConst(Const.CInt(10)), 0, 0, 'editor_test', 0), false, false, false, false, false, null, null, false);
+var script_path:String = Paths.getPath("source/ScriptExpressions.hx");
+var exprs:ScriptExpressions = new ScriptExpressions(Assets.getText(script_path), false);
+// exprs.addVariable('myVar', CType.CTPath([Int]), new Expr(ExprDef.EConst(Const.CInt(10)), 0, 0, 'editor_test', 0), false, false, false, false, false, null, null, false);
+exprs.unravel(exprs.AST);
+// ScriptExpressions.unravel_debug(exprs.AST);
+// HscriptTools.map(exprs.AST, (expr:Expr) -> {
+// 	switch (expr.e) {
+// 		case ExprDef.EFunction(args, expr, name, ret, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline):
+// 			trace('name: $name');
+// 			var filtered = exprs.functions.filter((e) -> e.name == name);
+// 			var container:FunctionContainer = filtered.pop();
+// 			var index:Int = exprs.expressions.indexOf(container);
+// 			if (index < 0) return expr;
 
-CoolUtil.safeSaveFile('./.test/test.hx', exprs.prettyString());
+// 			container.insertExpr(0, 
+// 				new Expr(
+// 					ExprDef.ECall(
+// 						new Expr(ExprDef.EIdent("trace"), 0, 0, 'editor_test', 0),
+// 						[new Expr(ExprDef.EIdent("myVar"), 0, 0, 'editor_test', 0)]
+// 					), 0, 0, 'editor_test', 0
+// 				)
+// 			);
+// 	}
+// 	return expr;
+// });
+// ScriptExpressions.unravel_debug(exprs.AST);
+CoolUtil.safeSaveFile('./.test/test.hx', exprs.toString());
 
 function new() {
 	FlxG.camera.bgColor = 0xFF808080;

@@ -11,4 +11,4 @@ function cool():Bool {
 	return false;
 }
 
-trace(cool());
+trace(test);
