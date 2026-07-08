@@ -19,7 +19,7 @@ import flixel.util.FlxAxes;
 import ScriptExpressions;
 import Type;
 
-var script_path:String = Paths.getPath("source/ScriptExpressions.hx");
+var script_path:String = Paths.getPath("data/test_scripts/test.hx");
 var exprs:ScriptExpressions = new ScriptExpressions(Assets.getText(script_path), false);
 // exprs.addVariable('myVar', CType.CTPath([Int]), new Expr(ExprDef.EConst(Const.CInt(10)), 0, 0, 'editor_test', 0), false, false, false, false, false, null, null, false);
 exprs.unravel(exprs.AST);
@@ -45,14 +45,14 @@ exprs.unravel(exprs.AST);
 // 	return expr;
 // });
 // ScriptExpressions.unravel_debug(exprs.AST);
-CoolUtil.safeSaveFile('./.test/test.hx', exprs.toString());
+CoolUtil.safeSaveFile('./.test/test.hx', exprs.prettyString());
 
 function new() {
 	FlxG.camera.bgColor = 0xFF808080;
 
 
 	for (idx=>container in exprs.variables) {
-		var block = new BaseBlock(container.name);
+		var block = new BaseBlock('${ScriptExpressions.stringify(container.toExpr())}');
 		block.x = (block.width+10) * idx;
 		add(block);
 	}
@@ -66,6 +66,7 @@ function destroy() {
 class BaseBlock extends FlxSprite {
 
 	public var name(default, set):String;
+	public var borderSize:Int = 10;
 	public function set_name(value:String) {
 		name = value;
 		_displayText.text = name;
@@ -77,12 +78,14 @@ class BaseBlock extends FlxSprite {
 	override function new(_name:String) {
 		super();
 		color = FlxColor.WHITE;
-		makeSolid(150, 150);
+		makeSolid(1, 1);
 		
 		_displayText = new FlxText(0, 0, 0, "");
 		_displayText.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, 'left', FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 
 		this.name = _name;
+		setGraphicSize(_displayText.width + borderSize, _displayText.height + borderSize);
+		updateHitbox();
 
 	}
 
@@ -90,9 +93,8 @@ class BaseBlock extends FlxSprite {
 		if (!visible || !exists) return;
 		super.update(elapsed);
 
-		_displayText.x = this.x + 5;
-		_displayText.y = this.y + 5;
-		_displayText.fieldWidth = this.width;
+		_displayText.x = this.x + (borderSize * 0.5);
+		_displayText.y = this.y + (borderSize * 0.5);
 		_displayText.update(elapsed);
 
 	}
