@@ -322,6 +322,9 @@ class ScriptExpressions {
 			case ExprDef.EImport(class_name, as_name, isUsing):
 				addImport(class_name, as_name, isUsing).exprOrigin(prev_expr);
 
+			case ExprDef.ECall(expr, params):
+				// Expr, Array<Expr>
+				// todo: save this in an array and keep its relative line in the code, since it can break if we move it from it's original position
 			// default: trace('Unknown expr: ${expr.e}');
 		}
 	}
