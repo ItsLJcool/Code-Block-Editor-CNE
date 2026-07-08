@@ -22,19 +22,6 @@ import Type;
 var script_path:String = Paths.getPath("data/test.hx");
 var exprs:ScriptExpressions = new ScriptExpressions(Assets.getText(script_path));
 exprs.addVariable('myVar', CType.CTPath([Int]), new Expr(ExprDef.EConst(Const.CInt(10)), 0, 0, 'editor_test', 0), false, false, false, false, false, null, null, false);
-/*
-function dummyExpr() {
-	var printer = new Printer();
-	var exprDef = ExprDef.EVar('myVar', CType.CTPath([Int]), new Expr(ExprDef.EConst(Const.CInt(10)), 0, 0, 'test', 1), false, false, false, false, false, null, null, false);
-	var expr = new Expr(exprDef, 0, 0, 'test', 1);
-	switch(exprs.AST.e) {
-		case ExprDef.EBlock(e): e.insert(0, expr);
-	}
-	// trace(exprs.AST.e);
-}
-dummyExpr();
-*/
-trace(exprs.test_toString());
 
 CoolUtil.safeSaveFile('./.test/test.hx', exprs.toString());
 

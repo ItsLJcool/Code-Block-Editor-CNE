@@ -288,18 +288,22 @@ class ScriptExpressions {
 	}
 
 	public function toString():String {
-		var buf = new StringBuf();
-		buf.add("\n");
-		buf.add(stringify(this.AST));
-		return buf.toString();
-	}
-
-	public function test_toString():String {
 		var printer = new Printer();
 		var buf = new StringBuf();
-		buf.add("\n");
-		for (container in variables) {
-			buf.add(stringify(container.toExpr()));
+		if (imports.length > 0) {
+			buf.add("/* region Imports */\n\n");
+			for (container in imports) buf.add(stringify(container.toExpr()));
+			buf.add("\n/* endregion */\n");
+		}
+		if (variables.length > 0) {
+			buf.add("\n/* region Variables */\n\n");
+			for (container in variables) buf.add(stringify(container.toExpr()));
+			buf.add("\n/* endregion */\n");
+		}
+		if (functions.length > 0) {
+			buf.add("\n/* region Functions */\n\n");
+			for (container in functions) buf.add(stringify(container.toExpr()));
+			buf.add("\n/* endregion */\n");
 		}
 		return buf.toString();
 	}
@@ -313,7 +317,7 @@ class ScriptExpressions {
 				addVariable(name, type, expr, isPublic, isStatic, isPrivate, isFinal, isInline, get, set, isVar).exprOrigin(prev_expr);
 
 			case ExprDef.EFunction(args, expr, name, ret, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline):
-				addFunction(name, args, expr, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline).exprOrigin(prev_expr);
+				addFunction(args, expr, name, ret, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline).exprOrigin(prev_expr);
 
 			case ExprDef.EImport(class_name, as_name, isUsing):
 				addImport(class_name, as_name, isUsing).exprOrigin(prev_expr);

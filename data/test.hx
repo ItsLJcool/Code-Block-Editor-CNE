@@ -3,7 +3,7 @@ import ScriptExpressions;
 
 var test:Int = 0;
 
-function cool() {
+function cool():Bool {
 	return false;
 }
 
