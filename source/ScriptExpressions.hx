@@ -1,4 +1,7 @@
 
+import haxe.ds.ObjectMap;
+import haxe.ds.IntMap;
+
 import hscript.Expr;
 import hscript.Expr.ExprDef;
 import hscript.Expr.Const;
@@ -126,6 +129,21 @@ class ImportContainer extends ExprContainer {
 	}
 }
 
+class CallContainer extends ExprContainer {
+	var params:Array<Expr>;
+
+	function new(expr:Expr, params:Array<Expr>) {
+		super(expr);
+		this.params = params;
+	}
+
+	override public function toExpr():Expr {
+		return new Expr(
+			ExprDef.ECall(expr, params),
+			this.pmin, this.pmax, '_CallContainer_', this.line
+		);
+	}
+}
 
 class ScriptExpressions {
 
@@ -264,9 +282,20 @@ class ScriptExpressions {
 		}
 	}
 
-	public var variables:Array<VariableContainer> 	= [];
-	public var functions:Array<FunctionContainer> 	= [];
-	public var imports:Array<ImportContainer> 		= [];
+	public var expressions:Array<ExprContainer> = [];
+
+	public var variables(get, never):Array<VariableContainer>;
+	function get_variables():Array<VariableContainer> {
+		return expressions.filter((e) -> e is VariableContainer);
+	}
+	public var functions(get, never):Array<FunctionContainer>;
+	function get_functions():Array<FunctionContainer> {
+		return expressions.filter(function(e) return e is FunctionContainer);
+	}
+	public var imports(get, never):Array<ImportContainer>;
+	function get_imports():Array<ImportContainer> {
+		return expressions.filter(function(e) return e is ImportContainer);
+	}
 
 	public function new(code:String, ?auto_unravel:Bool = true) {
 		this._code = code;
@@ -288,21 +317,61 @@ class ScriptExpressions {
 	}
 
 	public function toString():String {
-		var printer = new Printer();
 		var buf = new StringBuf();
-		if (imports.length > 0) {
+		buf.add('\n');
+		for (container in expressions) buf.add(stringify(container.toExpr()));
+		return buf.toString();
+	}
+
+	public function prettyString():String {
+		var buf = new StringBuf();
+
+		var _imports:Array<ImportContainer> = imports;
+		var _variables:Array<VariableContainer> = variables;
+		var _functions:Array<FunctionContainer> = functions;
+
+		var _calls:Array<CallContainer> = expressions.filter((e) -> e is CallContainer);
+
+		var bruh:IntMap<String> = new IntMap();
+		bruh.set(expressions.indexOf(_imports[imports.length - 1]), 'imports');
+		bruh.set(expressions.indexOf(_variables[variables.length - 1]), 'variables');
+		bruh.set(expressions.indexOf(_functions[functions.length - 1]), 'functions');
+		var values:Array<Int> = [for (int=>c in bruh) int];
+		values.sort((a, b) -> return a - b);
+
+		for (c in _calls) {
+			// idk if my algorithm is good but w/e
+			var idx:Int = 0;
+			var target:Int = expressions.indexOf(c);
+			var closest:Int = Math.NEGATIVE_INFINITY;
+			while (idx < values.length) {
+				if (closest < values[idx]) closest = values[idx];
+				if (closest > target) {
+					closest = values[idx-1];
+					break;
+				}
+				idx++;
+			}
+			switch (bruh.get(closest)) {
+				case 'imports': _imports.push(c);
+				case 'variables': _variables.push(c);
+				case 'functions': _functions.push(c);
+			}
+		}
+
+		if (_imports.length > 0) {
 			buf.add("/* region Imports */\n\n");
-			for (container in imports) buf.add(stringify(container.toExpr()));
+			for (container in _imports) buf.add(stringify(container.toExpr()));
 			buf.add("\n/* endregion */\n");
 		}
-		if (variables.length > 0) {
+		if (_variables.length > 0) {
 			buf.add("\n/* region Variables */\n\n");
-			for (container in variables) buf.add(stringify(container.toExpr()));
+			for (container in _variables) buf.add(stringify(container.toExpr()));
 			buf.add("\n/* endregion */\n");
 		}
-		if (functions.length > 0) {
+		if (_functions.length > 0) {
 			buf.add("\n/* region Functions */\n\n");
-			for (container in functions) buf.add(stringify(container.toExpr()));
+			for (container in _functions) buf.add(stringify(container.toExpr()));
 			buf.add("\n/* endregion */\n");
 		}
 		return buf.toString();
@@ -323,12 +392,12 @@ class ScriptExpressions {
 				addImport(class_name, as_name, isUsing).exprOrigin(prev_expr);
 
 			case ExprDef.ECall(expr, params):
-				// Expr, Array<Expr>
-				// todo: save this in an array and keep its relative line in the code, since it can break if we move it from it's original position
+				addCall(expr, params).exprOrigin(prev_expr);
 			// default: trace('Unknown expr: ${expr.e}');
 		}
 	}
 
+	/* region Variables */
 	public function addVariable(
 		name:String, ?type:Expr.CType, ?expr:Expr,
 		?isPublic:Bool, ?isStatic:Bool, ?isPrivate:Bool, ?isFinal:Bool, ?isInline:Bool,
@@ -336,22 +405,76 @@ class ScriptExpressions {
 		?isVar:Bool
 	):VariableContainer {
 		var c = new VariableContainer(name, type, expr, isPublic, isStatic, isPrivate, isFinal, isInline, get, set, isVar);
-		variables.push(c);
+		expressions.push(c);
 		return c;
 	}
 
+	public function insertVariable(
+		INDEX:Int, 
+		name:String, ?type:Expr.CType, ?expr:Expr,
+		?isPublic:Bool, ?isStatic:Bool, ?isPrivate:Bool, ?isFinal:Bool, ?isInline:Bool,
+		?get:Expr.FieldPropertyAccess, ?set:Expr.FieldPropertyAccess,
+		?isVar:Bool
+	):VariableContainer {
+		var c = new VariableContainer(name, type, expr, isPublic, isStatic, isPrivate, isFinal, isInline, get, set, isVar);
+		expressions.insert(INDEX, c);
+		return c;
+	}
+	/* endregion */
+
+	/* region Functions */
 	public function addFunction(
 		args:Array<Expr.Argument>, ?expr:Expr, ?name:String, ?ret:Expr.CType,
 		?isPublic:Bool, ?isStatic:Bool, ?isOverride:Bool, ?isPrivate:Bool, ?isFinal:Bool, ?isInline:Bool
 	):FunctionContainer {
 		var c = new FunctionContainer(args, expr, name, ret, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline);
-		functions.push(c);
+		expressions.push(c);
 		return c;
 	}
 
-	public function addImport(class_name:String, ?as_name:String, ?isUsing:Bool):ImportContainer {
-		var c = new ImportContainer(class_name, as_name, isUsing);
-		imports.push(c);
+	public function insertFunction(
+		INDEX:Int,
+		args:Array<Expr.Argument>, ?expr:Expr, ?name:String, ?ret:Expr.CType,
+		?isPublic:Bool, ?isStatic:Bool, ?isOverride:Bool, ?isPrivate:Bool, ?isFinal:Bool, ?isInline:Bool
+	):FunctionContainer {
+		var c = new FunctionContainer(args, expr, name, ret, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline);
+		expressions.insert(INDEX, c);
 		return c;
 	}
+	/* endregion */
+
+	/* region Imports */
+	public function addImport(class_name:String, ?as_name:String, ?isUsing:Bool):ImportContainer {
+		var c = new ImportContainer(class_name, as_name, isUsing);
+		expressions.push(c);
+		return c;
+	}
+
+	public function insertImport(
+		INDEX:Int,
+		class_name:String, ?as_name:String, ?isUsing:Bool
+	):ImportContainer {
+		var c = new ImportContainer(class_name, as_name, isUsing);
+		expressions.insert(INDEX, c);
+		return c;
+	}
+	/* endregion */
+
+	/* region Calls */
+	public function addCall(expr:Expr, params:Array<Expr>):CallContainer {
+		var c = new CallContainer(expr, params);
+		expressions.push(c);
+		return c;
+	}
+
+	public function insertCall(
+		INDEX:Int,
+		expr:Expr, params:Array<Expr>
+	):CallContainer {
+		var c = new CallContainer(expr, params);
+		expressions.insert(INDEX, c);
+		return c;
+	}
+	/* endregion */
+
 }

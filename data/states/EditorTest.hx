@@ -23,7 +23,7 @@ var script_path:String = Paths.getPath("data/test.hx");
 var exprs:ScriptExpressions = new ScriptExpressions(Assets.getText(script_path));
 exprs.addVariable('myVar', CType.CTPath([Int]), new Expr(ExprDef.EConst(Const.CInt(10)), 0, 0, 'editor_test', 0), false, false, false, false, false, null, null, false);
 
-CoolUtil.safeSaveFile('./.test/test.hx', exprs.toString());
+CoolUtil.safeSaveFile('./.test/test.hx', exprs.prettyString());
 
 function new() {
 	FlxG.camera.bgColor = 0xFF808080;
