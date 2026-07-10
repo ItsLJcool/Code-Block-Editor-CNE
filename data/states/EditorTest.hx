@@ -143,6 +143,7 @@ class FunctionBlock extends ExprBlock {
 }
 
 var script_path:String = Paths.getPath("data/test_scripts/test.hx");
+// var script_path:String = Paths.getPath("source/ScriptExpressions.hx");
 var exprs:ScriptExpressions = new ScriptExpressions(Assets.getText(script_path), false);
 exprs.addVariable('myVar', CType.CTPath([Int]), new Expr(ExprDef.EConst(Const.CInt(10)), 0, 0, 'editor_test', 0), false, false, false, false, false, null, null, false);
 exprs.unravel(exprs.AST);
@@ -204,7 +205,7 @@ function new() {
 	var last_block:FunctionBlock = null;
 	for (idx=>container in exprs.functions) {
 		var block = new FunctionBlock(container);
-		block.x = ((last_block?.x ?? 0) + (last_block?.width ?? 0)) + (idx == 0 ? 15 : 150);
+		block.x = ((last_block?.x ?? 0) + (last_block?.width ?? 0)) + (idx == 0 ? 15 : 250);
 		block.y += 25;
 		add(block);
 		last_block = block;
@@ -212,7 +213,13 @@ function new() {
 
 }
 
-
+function update(elapsed:Float) {
+	var speed:Int = (FlxG.keys.pressed.SHIFT) ? 250 : 150;
+	if (FlxG.keys.pressed.W) FlxG.camera.scroll.y -= speed * elapsed;
+	else if (FlxG.keys.pressed.S) FlxG.camera.scroll.y += speed * elapsed;
+	if (FlxG.keys.pressed.D) FlxG.camera.scroll.x += speed * elapsed;
+	else if (FlxG.keys.pressed.A) FlxG.camera.scroll.x -= speed * elapsed;
+}
 
 function destroy() {
 	FlxG.camera.bgColor = FlxColor.TRANSPARENT;

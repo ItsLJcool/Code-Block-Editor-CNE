@@ -449,8 +449,8 @@ class ScriptExpressions {
 				_cont.exprOrigin(prev_expr);
 				for (_expr in fields) unravel(_expr, prev_expr, _cont);
 
-			case ExprDef.EReturn(_), ExprDef.EConst(_), ExprDef.EIdent(_): //a
-			default: trace('Unknown expr: ${expr.e}');
+			// case ExprDef.EReturn(_), ExprDef.EConst(_), ExprDef.EIdent(_): //a
+			// default: trace('Unknown expr: ${expr.e}');
 		}
 		if (_cont != null && (prev_container is FunctionContainer)) prev_container.addVarContainer(_cont);
 	}
