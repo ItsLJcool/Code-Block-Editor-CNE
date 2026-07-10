@@ -23,8 +23,6 @@ import Type;
 
 class ExprBlock extends FlxSprite {
 
-	private var script_experssions:ScriptExpressions;
-
 	private var container:ExprContainer;
 	private var sub_exprs(get, never):Array<Expr>;
 	function get_sub_exprs():Array<Expr> {
@@ -37,9 +35,8 @@ class ExprBlock extends FlxSprite {
 
 	private var _displayText:FlxText = new FlxText();
 
-	override public function new(script_exprs:ScriptExpressions, c:ExprContainer, ?border:Int = 10) {
+	override public function new(c:ExprContainer, ?border:Int = 10) {
 		super();
-		this.script_experssions = script_exprs;
 		this.container = c;
 		this.borderSize = (border ?? 10);
 
@@ -55,7 +52,7 @@ class ExprBlock extends FlxSprite {
 	}
 
 	public function regen_display() {
-		_displayText.text = '${ScriptExpressions.stringify(container.expr)}';
+		_displayText.text = '${ScriptExpressions.stringify(container.toExpr())}';
 		
 		var _width:Int = _displayText.width + (borderSize * 0.5);
 		var _height:Int = _displayText.height + (borderSize * 0.5);
@@ -88,8 +85,8 @@ class FunctionBlock extends ExprBlock {
 
 	private var _inset:Int = 15;
 
-	override public function new(script_exprs:ScriptExpressions, c:FunctionContainer) {
-		super(script_exprs, c);
+	override public function new(c:FunctionContainer) {
+		super(c);
 
 		_insideText.setFormat(Paths.font("vcr.ttf"), 20, FlxColor.WHITE, 'left', FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 
@@ -100,12 +97,8 @@ class FunctionBlock extends ExprBlock {
 		_displayText.text = 'function ${container.name}';
 		
 		CoolUtil.clear(expr_blocks);
-		for (expr in this.sub_exprs) {
-			// todo: pls help im stupid
-			// var cont = script_experssions.getContainerForExpr(expr);
-			// trace(cont.toExpr().origin, expr.e);
-			// if (cont == null) continue;
-			// expr_blocks.push(new ExprBlock(cont, Math.min(5, borderSize * 0.5)));
+		for (cont in this.container.varContainers) {
+			expr_blocks.push(new ExprBlock(cont, borderSize));
 		}
 		
 		var _width:Int = _displayText.width + (borderSize * 0.5);
@@ -127,7 +120,7 @@ class FunctionBlock extends ExprBlock {
 		var prev_block:ExprBlock = this;
 		for (idx=>block in expr_blocks) {
 			block.x = this.x + _inset;
-			block.y = this.y + prev_block.height + _inset;
+			block.y = prev_block.y + prev_block.height + _inset;
 			block.antialiasing = antialiasing;
 			block.update(elapsed);
 			prev_block = block;
@@ -210,8 +203,8 @@ function new() {
 
 	var last_block:FunctionBlock = null;
 	for (idx=>container in exprs.functions) {
-		var block = new FunctionBlock(exprs, container);
-		block.x = ((last_block?.x ?? 0) + (last_block?.width ?? 0)) + 10;
+		var block = new FunctionBlock(container);
+		block.x = ((last_block?.x ?? 0) + (last_block?.width ?? 0)) + (idx == 0 ? 15 : 150);
 		block.y += 25;
 		add(block);
 		last_block = block;

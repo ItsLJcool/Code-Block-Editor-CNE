@@ -1,4 +1,5 @@
 
+import haxe.macro.Expr;
 import haxe.ds.ObjectMap;
 import haxe.ds.IntMap;
 
@@ -20,6 +21,7 @@ import StringBuf;
 using StringTools;
 
 class ExprContainer {
+	private var _functionContainer:Null<FunctionContainer>;
 	public var expr:Null<Expr>;
 
 	public var pmin:Int = 0;
@@ -79,6 +81,9 @@ class VariableContainer extends ExprContainer {
 }
 
 class FunctionContainer extends ExprContainer {
+
+	private var varContainers:Array<VariableContainer> = [];
+
 	var args:Array<Expr.Argument>;
 	var name:String;
 	var ret:Expr.CType;
@@ -101,6 +106,11 @@ class FunctionContainer extends ExprContainer {
 		this.isPrivate = isPrivate;
 		this.isFinal = isFinal;
 		this.isInline = isInline;
+	}
+
+	public function addVarContainer(cont:VariableContainer) {
+		this.varContainers.push(cont);
+		cont._functionContainer = this;
 	}
 
 	public function addExpr(_expr:Expr):Bool {
@@ -352,27 +362,6 @@ class ScriptExpressions {
 	public var custom_classes(get, never):Array<CustomClassContainer>;
 	function get_custom_classes():Array<CustomClassContainer> { return expressions.filter(function(e) return e is CustomClassContainer); }
 
-	public function getContainerForExpr(expr:Expr):Null<ExprContainer> {
-		for (container in expressions) {
-			if (container.expr == null || container.expr.e == null) continue;
-			
-			switch (container.expr.e) {
-				case ExprDef.EBlock(exprs):
-					var killMe:Null<ExprContainer> = [];
-					for (e in exprs) {
-						if (e == expr) continue;
-						killMe.push(e);
-					}
-					killMe = killMe.filter((e) -> e != null);
-					if (killMe.length > 0) return container;
-				default:
-					if (container.expr == expr) return container;
-			}
-		}
-
-		return null;
-	}
-
 	public function new(code:String, ?auto_unravel:Bool = true) {
 		this._code = code;
 		
@@ -430,28 +419,40 @@ class ScriptExpressions {
 		return buf.toString();
 	}
 
-	public function unravel(expr:Expr, ?prev_expr:Expr = null) {
+	public function unravel(expr:Expr, ?prev_expr:Expr = null, ?prev_container:ExprContainer = null) {
 		if (expr == null) return;
+		var _cont:ExprContainer = null;
 		switch (expr.e) {
-			case ExprDef.EBlock(exprs): for (e in exprs) unravel(e, expr);
+			case ExprDef.EBlock(exprs): for (e in exprs) unravel(e, expr, prev_container);
 
-			case ExprDef.EVar(name, type, expr, isPublic, isStatic, isPrivate, isFinal, isInline, get, set, isVar):
-				addVariable(name, type, expr, isPublic, isStatic, isPrivate, isFinal, isInline, get, set, isVar).exprOrigin(prev_expr);
+			case ExprDef.EVar(name, type, _expr, isPublic, isStatic, isPrivate, isFinal, isInline, get, set, isVar):
+				_cont = addVariable(name, type, _expr, isPublic, isStatic, isPrivate, isFinal, isInline, get, set, isVar);
+				_cont.exprOrigin(prev_expr);
+				unravel(_expr, prev_expr, _cont);
 
-			case ExprDef.EFunction(args, expr, name, ret, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline):
-				addFunction(args, expr, name, ret, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline).exprOrigin(prev_expr);
+			case ExprDef.EFunction(args, _expr, name, ret, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline):
+				_cont = addFunction(args, _expr, name, ret, isPublic, isStatic, isOverride, isPrivate, isFinal, isInline);
+				_cont.exprOrigin(prev_expr);
+				unravel(_expr, prev_expr, _cont);
 
 			case ExprDef.EImport(class_name, as_name, isUsing):
-				addImport(class_name, as_name, isUsing).exprOrigin(prev_expr);
+				_cont = addImport(class_name, as_name, isUsing);
+				_cont.exprOrigin(prev_expr);
 			
-			case ExprDef.ECall(expr, params):
-				addCall(expr, params).exprOrigin(prev_expr);
+			case ExprDef.ECall(_expr, params):
+				_cont = addCall(_expr, params);
+				_cont.exprOrigin(prev_expr);
+				unravel(_expr, prev_expr, _cont);
 			
 			case ExprDef.EClass(name, fields, extend, interfaces, isFinal, isPrivate):
-				addCustomClass(name, fields, extend, interfaces, isFinal, isPrivate).exprOrigin(prev_expr);
+				_cont = addCustomClass(name, fields, extend, interfaces, isFinal, isPrivate);
+				_cont.exprOrigin(prev_expr);
+				for (_expr in fields) unravel(_expr, prev_expr, _cont);
 
+			case ExprDef.EReturn(_), ExprDef.EConst(_), ExprDef.EIdent(_): //a
 			default: trace('Unknown expr: ${expr.e}');
 		}
+		if (_cont != null && (prev_container is FunctionContainer)) prev_container.addVarContainer(_cont);
 	}
 
 	/* region Variables */
