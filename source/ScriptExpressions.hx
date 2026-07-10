@@ -8,12 +8,14 @@ import hscript.Expr.Const;
 import hscript.Expr.CType;
 import hscript.Parser;
 import hscript.Printer;
+import hscript.Tools as HscriptTools;
 
 import haxe.ds.StringMap;
 
 import funkin.backend.scripting.Script;
 import funkin.backend.scripting.HScript;
 
+import ParserHscript;
 import StringBuf;
 using StringTools;
 
@@ -336,25 +338,39 @@ class ScriptExpressions {
 	public var expressions:Array<ExprContainer> = [];
 
 	public var variables(get, never):Array<VariableContainer>;
-	function get_variables():Array<VariableContainer> {
-		return expressions.filter((e) -> e is VariableContainer);
-	}
+	function get_variables():Array<VariableContainer> { return expressions.filter((e) -> e is VariableContainer); }
+
 	public var functions(get, never):Array<FunctionContainer>;
-	function get_functions():Array<FunctionContainer> {
-		return expressions.filter(function(e) return e is FunctionContainer);
-	}
+	function get_functions():Array<FunctionContainer> { return expressions.filter(function(e) return e is FunctionContainer); }
+
 	public var imports(get, never):Array<ImportContainer>;
-	function get_imports():Array<ImportContainer> {
-		return expressions.filter(function(e) return e is ImportContainer);
-	}
+	function get_imports():Array<ImportContainer> { return expressions.filter(function(e) return e is ImportContainer); }
+	
 	public var calls(get, never):Array<CallContainer>;
-	function get_calls():Array<CallContainer> {
-		return expressions.filter(function(e) return e is CallContainer);
-	}
+	function get_calls():Array<CallContainer> { return expressions.filter(function(e) return e is CallContainer); }
 
 	public var custom_classes(get, never):Array<CustomClassContainer>;
-	function get_custom_classes():Array<CustomClassContainer> {
-		return expressions.filter(function(e) return e is CustomClassContainer);
+	function get_custom_classes():Array<CustomClassContainer> { return expressions.filter(function(e) return e is CustomClassContainer); }
+
+	public function getContainerForExpr(expr:Expr):Null<ExprContainer> {
+		for (container in expressions) {
+			if (container.expr == null || container.expr.e == null) continue;
+			
+			switch (container.expr.e) {
+				case ExprDef.EBlock(exprs):
+					var killMe:Null<ExprContainer> = [];
+					for (e in exprs) {
+						if (e == expr) continue;
+						killMe.push(e);
+					}
+					killMe = killMe.filter((e) -> e != null);
+					if (killMe.length > 0) return container;
+				default:
+					if (container.expr == expr) return container;
+			}
+		}
+
+		return null;
 	}
 
 	public function new(code:String, ?auto_unravel:Bool = true) {
@@ -386,60 +402,29 @@ class ScriptExpressions {
 	public function prettyString():String {
 		var buf = new StringBuf();
 
-		var _imports:Array<ImportContainer> = imports;
-		var _variables:Array<VariableContainer> = variables;
-		var _functions:Array<FunctionContainer> = functions;
-		var _custom_classes:Array<CustomClassContainer> = custom_classes;
-
-		var _calls:Array<CallContainer> = calls;
-
-		var bruh:IntMap<String> = new IntMap();
-		bruh.set(expressions.indexOf(_imports[imports.length - 1]), 'imports');
-		bruh.set(expressions.indexOf(_variables[variables.length - 1]), 'variables');
-		bruh.set(expressions.indexOf(_functions[functions.length - 1]), 'functions');
-		bruh.set(expressions.indexOf(_custom_classes[custom_classes.length - 1]), 'custom_classes');
-		var values:Array<Int> = [for (int=>c in bruh) int];
-		values.sort((a, b) -> return a - b);
-
-		for (c in _calls) {
-			// idk if my algorithm is good but w/e
-			var idx:Int = 0;
-			var target:Int = expressions.indexOf(c);
-			var closest:Int = Math.NEGATIVE_INFINITY;
-			while (idx < values.length) {
-				if (closest < values[idx]) closest = values[idx];
-				if (closest > target) {
-					closest = values[idx-1];
-					break;
-				}
-				idx++;
-			}
-			switch (bruh.get(closest)) {
-				case 'imports': _imports.push(c);
-				case 'variables': _variables.push(c);
-				case 'functions': _functions.push(c);
-				case 'custom_classes': _custom_classes.push(c);
-			}
-		}
-
-		if (_imports.length > 0) {
+		if (imports.length > 0) {
 			buf.add("/* region Imports */\n\n");
-			for (container in _imports) buf.add(stringify(container.toExpr()));
+			for (container in imports) buf.add(stringify(container.toExpr()));
 			buf.add("\n/* endregion */\n");
 		}
-		if (_custom_classes.length > 0) {
+		if (custom_classes.length > 0) {
 			buf.add("\n/* region Custom Classes */\n\n");
-			for (container in _custom_classes) buf.add(stringify(container.toExpr()));
+			for (container in custom_classes) buf.add(stringify(container.toExpr()));
 			buf.add("\n/* endregion */\n");
 		}
-		if (_variables.length > 0) {
+		if (variables.length > 0) {
 			buf.add("\n/* region Variables */\n\n");
-			for (container in _variables) buf.add(stringify(container.toExpr()));
+			for (container in variables) buf.add(stringify(container.toExpr()));
 			buf.add("\n/* endregion */\n");
 		}
-		if (_functions.length > 0) {
+		if (functions.length > 0) {
 			buf.add("\n/* region Functions */\n\n");
-			for (container in _functions) buf.add(stringify(container.toExpr()));
+			for (container in functions) buf.add(stringify(container.toExpr()));
+			buf.add("\n/* endregion */\n");
+		}
+		if (calls.length > 0) {
+			buf.add("\n/* region Outside Exectution */\n\n");
+			for (container in calls) buf.add(stringify(container.toExpr()));
 			buf.add("\n/* endregion */\n");
 		}
 		return buf.toString();
@@ -458,13 +443,14 @@ class ScriptExpressions {
 
 			case ExprDef.EImport(class_name, as_name, isUsing):
 				addImport(class_name, as_name, isUsing).exprOrigin(prev_expr);
-
+			
 			case ExprDef.ECall(expr, params):
 				addCall(expr, params).exprOrigin(prev_expr);
+			
 			case ExprDef.EClass(name, fields, extend, interfaces, isFinal, isPrivate):
 				addCustomClass(name, fields, extend, interfaces, isFinal, isPrivate).exprOrigin(prev_expr);
 
-			// default: trace('Unknown expr: ${expr.e}');
+			default: trace('Unknown expr: ${expr.e}');
 		}
 	}
 

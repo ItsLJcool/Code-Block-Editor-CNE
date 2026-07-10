@@ -1,13 +1,18 @@
 
 import ScriptExpressions;
 
-var test:Int = 0;
 
 function new() {
+	var test:Int = 0;
+	// test++;
+	// test -= 1;
+	// ++test;
+	cool(test);
+	
 	trace("start!");
 }
 
-function cool():Bool {
+function cool(param:Int):Bool {
 	return false;
 }
 
